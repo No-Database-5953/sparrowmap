@@ -560,7 +560,7 @@ def insert_sighting(rec: dict) -> int:
     INSERT is even built.
     """
     rec = dict(rec)
-    if rec.get("tier") != "public":
+    if rec.get("tier") != "public" and not CONFIG.get("store_all_plates"):
         rec["plate_text"] = None
         rec["plate_state"] = None
 
@@ -923,6 +923,25 @@ def search_plate(text: str, limit: int = 200) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM sightings WHERE tier='public' AND reviewed='confirmed' "
         "AND plate_text IS NOT NULL AND plate_text != '' "
+        "AND REPLACE(REPLACE(UPPER(plate_text),' ',''),'-','') LIKE ? "
+        "ORDER BY ts DESC LIMIT ?", (q + "%", int(limit))).fetchall()
+    return [dict(r) for r in rows]
+
+
+def search_all_plates(text: str, limit: int = 200) -> list[dict]:
+    """Every sighting of a plate, any tier. OPERATOR ONLY, and only when
+    store_all_plates is on - otherwise private rows hold no plate text and
+    this refuses rather than quietly answering from the public tier.
+    Same prefix-or-exact matching as search_plate.
+    """
+    if not CONFIG.get("store_all_plates"):
+        raise PermissionError("store_all_plates is off on this hub")
+    q = "".join(ch for ch in (text or "").upper() if ch.isalnum())
+    if len(q) < 3:
+        return []
+    conn = connect()
+    rows = conn.execute(
+        "SELECT * FROM sightings WHERE plate_text IS NOT NULL AND plate_text != '' "
         "AND REPLACE(REPLACE(UPPER(plate_text),' ',''),'-','') LIKE ? "
         "ORDER BY ts DESC LIMIT ?", (q + "%", int(limit))).fetchall()
     return [dict(r) for r in rows]

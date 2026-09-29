@@ -230,7 +230,7 @@ def store_crop(frame: Image.Image, bbox: Optional[tuple], meta: dict,
     img = frame.convert("RGB")
 
     # Redact BEFORE cropping, while the boxes are still in frame coordinates.
-    if meta.get("tier") != "public":
+    if meta.get("tier") != "public" and not CONFIG.get("store_all_plates"):
         # EVERY candidate box, not just the detector's favourite. It picks by
         # area, and a marked vehicle's door livery is a larger patch of white
         # text than its plate - so the "best" box covered the livery and left

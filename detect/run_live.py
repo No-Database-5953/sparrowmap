@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import signal
 import sys
@@ -43,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import classify              # noqa: E402
 import node_key              # noqa: E402
+
 import snapshot              # noqa: E402
 from core import DATA, NODE_UA, ROOT  # noqa: E402
 from detect import bank, visual    # noqa: E402
@@ -50,6 +52,9 @@ from detect.grabber import FrameGrabber   # noqa: E402
 from detect.pipeline import (MIN_TRACK_FRAMES, TRACK_TIMEOUT_FRAMES,  # noqa: E402
                              PlateReader, VehiclePass, VehicleTracker, frame_quality)
 from detect import priority   # noqa: E402
+
+# Set from SPARROW_STORE_ALL_PLATES in main(). See there.
+STORE_ALL_PLATES = False
 
 EVAL = DATA / "eval" / "live"
 
@@ -140,6 +145,16 @@ def main() -> None:
     ap.add_argument("--no-bank", action="store_true",
                     help="do not keep vehicle crops for training (see detect/bank.py)")
     args = ap.parse_args()
+
+    # SPARROW_STORE_ALL_PLATES=1: send every plate read to a PRIVATE hub that
+    # has store_all_plates on. Refused for the public map, which would only
+    # drop the text on arrival - after it had already left this machine.
+    global STORE_ALL_PLATES
+    STORE_ALL_PLATES = os.environ.get("SPARROW_STORE_ALL_PLATES") == "1"
+    if STORE_ALL_PLATES and "sparrowmap.com" in args.hub.lower():
+        raise SystemExit(
+            "SPARROW_STORE_ALL_PLATES is for a private hub; --hub points at "
+            f"{args.hub}. Unset it or point --hub at your own hub.")
 
     if args.post and not args.node:
         raise SystemExit(
@@ -919,7 +934,8 @@ def post_one(vp, args, vid, ev=None, verdict=None, plate=None, agree=None,
         # against a 0.85 bar, so tierable was unreachable for a marked patrol
         # car and the text was thrown away before the hub could decide.
         # The hub still decides; it just has something to decide about now.
-        "plate_text": plate if (verdict["tierable"] or verdict["sightable"]) else "",
+        "plate_text": plate if (verdict["tierable"] or verdict["sightable"]
+                                or STORE_ALL_PLATES) else "",
         "plate_state": "MI",
         "plate_conf": agree,
         "body": vp.cls_name, "heading": vp.heading(),

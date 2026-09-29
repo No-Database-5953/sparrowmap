@@ -248,13 +248,19 @@ def redact(row: dict, viewer: str = "anon") -> dict:
     # (db.review_sighting). Until somebody has looked, the plate stays out of
     # every read path - which is what the note in hub._ingest means by
     # "unverified".
-    if r.get("tier") == "public" and r.get("reviewed") != "confirmed":
+    # store_all_plates: the operator of a private hub sees every stored plate.
+    # Anonymous readers still get everything below.
+    keep_plate = viewer != "anon" and bool(CONFIG.get("store_all_plates"))
+
+    if (r.get("tier") == "public" and r.get("reviewed") != "confirmed"
+            and not keep_plate):
         r.pop("plate_text", None)
         r.pop("plate_state", None)
 
     if r.get("tier") != "public":
-        r.pop("plate_text", None)
-        r.pop("plate_state", None)
+        if not keep_plate:
+            r.pop("plate_text", None)
+            r.pop("plate_state", None)
         # 🚨 AND THE VEHICLE LINK, WHICH IS THE STRONGEST THING ON THE ROW.
         #
         # A tag says "these sightings are probably one vehicle", which across
@@ -339,6 +345,8 @@ def purge_expired(conn) -> dict:
     cur = conn.cursor()
 
     priv_days = float(CONFIG.get("civilian_retention_days", 14) or 0)
+    if CONFIG.get("store_all_plates"):
+        priv_days = float(CONFIG.get("all_plates_retention_days", 30) or 0)
     pub_days = float(CONFIG.get("public_retention_days", 0) or 0)
 
     # 🚨 NEVER DELETE A ROW A HUMAN HAS BEEN ASKED ABOUT.

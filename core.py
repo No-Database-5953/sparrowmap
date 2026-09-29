@@ -204,6 +204,17 @@ DEFAULTS = {
     # Refuse to store a sighting whose plate read is weaker than this.
     "min_plate_confidence": 0.55,
 
+    # ---- private hub: keep every readable plate --------------------------
+    # OFF by default, and never for a hub that feeds the public map. When on,
+    # civilian plates are stored readable, left legible in snapshots, and
+    # searchable by the OPERATOR only (anonymous readers still get the
+    # redacted row). Civilian sightings are then kept for
+    # all_plates_retention_days instead of civilian_retention_days.
+    # The camera node must also run with SPARROW_STORE_ALL_PLATES=1, or it
+    # never sends a civilian plate in the first place.
+    "store_all_plates": False,
+    "all_plates_retention_days": 30,
+
     # ---- contribution ---------------------------------------------------
     # When true, a brand new node may post sightings before a human approves
     # it. Useful for a demo, wrong for a real deployment - so the DEFAULT is

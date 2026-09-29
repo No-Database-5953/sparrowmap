@@ -2853,6 +2853,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"query": query,
                                    "results": _public_rows(rows)})
 
+            if p == "/api/plate/all":
+                # store_all_plates only: every stored plate, any tier. Operator
+                # only - the same check that guards retraction.
+                if not self._is_local():
+                    return self._err(403, "operator only")
+                if not CONFIG.get("store_all_plates"):
+                    return self._err(404, "store_all_plates is off")
+                query = (q.get("q") or [""])[0]
+                rows = db.search_all_plates(query)
+                return self._json({"query": query, "results": [
+                    privacy.redact(r, viewer="operator") for r in rows]})
+
             if p == "/api/markings":
                 # Search what was READ OFF the photograph - the unit number on
                 # the roof or door, and the agency word beside it.
@@ -5529,7 +5541,8 @@ class Handler(BaseHTTPRequestHandler):
                     dropped_image = str(exc)
                 except Exception as exc:
                     return self._err(400, f"snapshot rejected: {exc}")
-            elif tier != "public" and not pbox and not candidate:
+            elif (tier != "public" and not pbox and not candidate
+                  and not CONFIG.get("store_all_plates")):
                 # We cannot redact a plate we cannot locate, and a photograph of
                 # a car IS a photograph of its plate. So a private-tier image
                 # with no plate box is discarded rather than stored. The
@@ -5608,6 +5621,7 @@ class Handler(BaseHTTPRequestHandler):
         # An empty string is not "no plate", it is a value - and it was being
         # counted as a distinct vehicle. Store the absence as an absence.
         phash = privacy.plate_hash(plate, ev.get("plate_state", "")) or None
+        keep_all = bool(CONFIG.get("store_all_plates")) and bool(plate)
 
         rec = {
             "node_id": nid, "ts": ts,
@@ -5628,8 +5642,11 @@ class Handler(BaseHTTPRequestHandler):
             # dot, which is public precisely BECAUSE it carries no identifier.
             # That smuggled the identifier back into the row that was supposed to
             # be identifier-free, the exact thing the comment below warns of.
-            "plate_text": plate if c["tierable"] else None,
-            "plate_state": ev.get("plate_state") if c["tierable"] else None,
+            # store_all_plates (private hub only): keep every plate that
+            # cleared min_plate_confidence, whatever the tier.
+            "plate_text": plate if (c["tierable"] or keep_all) else None,
+            "plate_state": (ev.get("plate_state")
+                            if (c["tierable"] or keep_all) else None),
             "plate_conf": conf,
             "vclass": c["vclass"], "vclass_conf": c["conf"], "vclass_why": c["why"],
             "color": ev.get("color"), "body": ev.get("body"),
